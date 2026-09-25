@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FI-TIMER</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet">
+    <!-- Librería TTS externa: ResponsiveVoice -->
+    <script src="https://code.responsivevoice.org/responsivevoice.js?key=FREE_KEY"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; touch-action: manipulation; }
+        .timer-font { font-family: 'JetBrains Mono', monospace; }
+        .glow-active { box-shadow: 0 0 40px rgba(59, 130, 246, 0.3); }
+        .glow-rest { box-shadow: 0 0 40px rgba(16, 185, 129, 0.3); }
+        .glow-prep { box-shadow: 0 0 40px rgba(245, 158, 11, 0.3); }
+
+        @keyframes subtle-bounce {
+            0% { transform: scale(1); }
+            30% { transform: scale(0.96); }
+            60% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+        .animate-subtle-bounce {
+            animation: subtle-bounce 0.3s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-full flex flex-col justify-between overflow-x-hidden selection:bg-blue-500 selection:text-white">
+
+    <header class="w-full p-4 flex justify-between items-center border-b border-slate-800/60 bg-slate-900/40 backdrop-blur-md">
+        <div class="flex items-center space-x-2">
+            <div class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
+            <span class="text-xs font-bold tracking-widest text-slate-400 uppercase">FI-TIMER v5.9</span>
+        </div>
+        <div id="audio-status" class="text-xs text-slate-500 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
+            Voz: ResponsiveVoice
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col items-center justify-center p-4 max-w-md mx-auto w-full text-center">
+
+        <div id="screen-initial" class="flex flex-col items-center justify-center space-y-8 w-full cursor-pointer py-20">
+            <div class="space-y-3">
+                <h1 class="text-5xl sm:text-6xl font-black tracking-tight text-white">
+                    FI<span class="text-blue-500">TIMER</span>
+                </h1>
+                <p class="text-xs text-slate-400">Toca en cualquier lugar para empezar</p>
+            </div>
+        </div>
+
+        <div id="screen-active" class="hidden flex-col items-center justify-between w-full h-full py-6">
+            <div class="w-full flex justify-between items-center px-2">
+            </div>
+
+            <div class="my-auto flex flex-col items-center justify-center w-full">
+                <div id="card-timer" class="w-64 h-64 sm:w-72 sm:h-72 rounded-full border-4 border-slate-800 bg-slate-900/50 backdrop-blur flex flex-col items-center justify-center relative glow-prep transition-all duration-300 cursor-pointer select-none">
+                    <svg class="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="46" fill="none" stroke="#1e293b" stroke-width="4"></circle>
+                        <circle id="progress-ring" cx="50" cy="50" r="46" fill="none" stroke="#f59e0b" stroke-width="4" stroke-dasharray="289" stroke-dashoffset="0" stroke-linecap="round" class="transition-all duration-100"></circle>
+                    </svg>
+                    <span id="label-timer" class="timer-font text-6xl sm:text-7xl font-black text-white tracking-tighter pointer-events-none">10</span>
+                    <span id="label-subtext" class="text-xs text-slate-500 mt-1 h-4 pointer-events-none">Prepárate</span>
+                </div>
+            </div>
+
+            <div class="w-full space-y-4">
+                <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden border border-slate-800">
+                    <div id="total-progress-bar" class="bg-blue-500 h-full w-0 transition-all duration-300"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="screen-finished" class="hidden flex-col items-center justify-center space-y-6 w-full cursor-pointer py-20">
+            <h2 class="text-3xl font-black text-white">¡Entrenamiento Completado!</h2>
+        </div>
+    </main>
+
+    <script>
+        const AudioService = {
+            voiceName: "Spanish Female",
+            init() {
+                const statusEl = document.getElementById('audio-status');
+                if (window.responsiveVoice) {
+                    statusEl.textContent = "Voz: ResponsiveVoice (ES)";
+                    statusEl.className = "text-xs text-emerald-400 bg-emerald-950/40 px-3 py-1 rounded-full border border-emerald-900/50";
+                } else {
+                    statusEl.textContent = "Voz: Error al cargar librería";
+                    statusEl.className = "text-xs text-amber-400 bg-amber-950/40 px-3 py-1 rounded-full border border-amber-900/50";
+                }
+            },
+            speak(text) {
+                if (!window.responsiveVoice) return;
+                
+                // Detener cualquier locución previa en cola para evitar superposiciones rápidas
+                responsiveVoice.cancel();
+
+                responsiveVoice.speak(text, this.voiceName, {
+                    rate: 1.1,
+                    pitch: 1.0,
+                    volume: 1.0
+                });
+            }
+        };
+
+        window.addEventListener('load', () => {
+            AudioService.init();
+        });
+
+        function buildWorkoutTimeline() {
+            let timeline = [];
+
+            timeline.push({ type: 'prep', duration: 10, title: 'Preparación', sub: 'Prepárate para empezar', sound: 'Comenzando cuenta atrás inicial' });
+
+            for (let serie = 1; serie <= 3; serie++) {
+                for (let rep = 1; rep <= 10; rep++) {
+                    timeline.push({ type: 'up', duration: 2, title: `Serie ${serie} • Rep ${rep}/10`, sub: 'Subiendo', speakNumbers: true });
+                    timeline.push({ type: 'tension', duration: 3, title: `Serie ${serie} • Rep ${rep}/10`, sub: '¡Tensión!', speakNumbers: true });
+                    timeline.push({ type: 'down', duration: 4, title: `Serie ${serie} • Rep ${rep}/10`, sub: 'Bajando', speakNumbers: true });
+                }
+
+                if (serie < 3) {
+                    timeline.push({ type: 'rest', duration: 120, title: `Descanso (Serie ${serie})`, sub: 'Recupera el aliento', sound: 'Fin de serie. Descanso de dos minutos.' });
+                    timeline.push({ type: 'prep', duration: 10, title: `Serie ${serie + 1}`, sub: 'Prepárate para la siguiente serie', sound: 'Fin del descanso. Prepárate.' });
+                }
+            }
+
+            return timeline;
+        }
+
+        let appState = {
+            timeline: [],
+            currentIndex: 0,
+            stepElapsed: 0,
+            paused: false,
+            timerInterval: null,
+            lastFrameTime: 0,
+            lastSpokenNumber: 0
+        };
+
+        const screens = {
+            initial: document.getElementById('screen-initial'),
+            active: document.getElementById('screen-active'),
+            finished: document.getElementById('screen-finished')
+        };
+
+        function switchScreen(name) {
+            Object.values(screens).forEach(s => { s.classList.add('hidden'); s.classList.remove('flex'); });
+            screens[name].classList.remove('hidden');
+            screens[name].classList.add('flex');
+        }
+
+        function startWorkout() {
+            AudioService.init();
+            
+            appState.timeline = buildWorkoutTimeline();
+            appState.currentIndex = 0;
+            appState.stepElapsed = 0;
+            appState.paused = false;
+            appState.lastFrameTime = performance.now();
+            appState.lastSpokenNumber = 0;
+
+            switchScreen('active');
+            executeStepStart();
+
+            if (appState.timerInterval) clearInterval(appState.timerInterval);
+            appState.timerInterval = setInterval(mainLoop, 100);
+        }
+
+        function executeStepStart() {
+            const step = appState.timeline[appState.currentIndex];
+            appState.stepElapsed = 0;
+            appState.lastSpokenNumber = 0;
+            if (step.sound) AudioService.speak(step.sound);
+        }
+
+        function mainLoop() {
+            if (screens.active.classList.contains('hidden')) return;
+
+            const now = performance.now();
+            if (!appState.paused) {
+                const deltaTime = (now - appState.lastFrameTime) / 1000;
+                appState.stepElapsed += deltaTime;
+
+                const currentStep = appState.timeline[appState.currentIndex];
+                const remaining = currentStep.duration - appState.stepElapsed;
+
+                if (currentStep.speakNumbers) {
+                    let currentSecond = Math.floor(appState.stepElapsed) + 1;
+                    if (currentSecond >= 1 && currentSecond <= currentStep.duration && currentSecond !== appState.lastSpokenNumber) {
+                        appState.lastSpokenNumber = currentSecond;
+                        AudioService.speak(currentSecond.toString());
+                    }
+                }
+
+                updateUI(currentStep, remaining);
+
+                if (appState.stepElapsed >= currentStep.duration) {
+                    appState.currentIndex++;
+                    if (appState.currentIndex >= appState.timeline.length) {
+                        clearInterval(appState.timerInterval);
+                        switchScreen('finished');
+                        AudioService.speak("¡Entrenamiento concluido con éxito!");
+                        return;
+                    }
+                    executeStepStart();
+                }
+            }
+
+            appState.lastFrameTime = now;
+        }
+
+        function updateUI(step, remaining) {
+            document.getElementById('label-subtext').textContent = step.sub;
+
+            const card = document.getElementById('card-timer');
+            const ring = document.getElementById('progress-ring');
+
+            let displayVal;
+            let ringColor = "#3b82f6";
+            let glowClass = "glow-active";
+
+            if (step.type === 'prep') {
+                displayVal = Math.ceil(remaining);
+                ringColor = "#f59e0b";
+                glowClass = "glow-prep";
+            } else if (step.type === 'rest') {
+                let mins = Math.floor(remaining / 60);
+                let secs = Math.floor(remaining % 60);
+                displayVal = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                ringColor = "#10b981";
+                glowClass = "glow-rest";
+            } else {
+                displayVal = Math.min(step.duration, Math.floor(appState.stepElapsed) + 1);
+                
+                if (step.type === 'up') {
+                    ringColor = "#38bdf8";
+                } else if (step.type === 'tension') {
+                    ringColor = "#2563eb";
+                } else if (step.type === 'down') {
+                    ringColor = "#9333ea";
+                }
+            }
+
+            const isAnimating = card.classList.contains('animate-subtle-bounce');
+            card.className = `w-64 h-64 sm:w-72 sm:h-72 rounded-full border-4 border-slate-800 bg-slate-900/50 backdrop-blur flex flex-col items-center justify-center relative transition-all duration-300 cursor-pointer select-none ${glowClass} ${isAnimating ? 'animate-subtle-bounce' : ''}`;
+            
+            document.getElementById('label-timer').textContent = displayVal;
+            ring.setAttribute('stroke', ringColor);
+
+            const circumference = 289.02;
+            ring.style.strokeDashoffset = circumference * (appState.stepElapsed / step.duration);
+
+            let totalDuration = appState.timeline.reduce((acc, s) => acc + s.duration, 0);
+            let elapsedTotal = 0;
+            for (let i = 0; i < appState.currentIndex; i++) {
+                elapsedTotal += appState.timeline[i].duration;
+            }
+            elapsedTotal += appState.stepElapsed;
+            document.getElementById('total-progress-bar').style.width = `${Math.min(100, (elapsedTotal / totalDuration) * 100)}%`;
+        }
+
+        screens.initial.addEventListener('click', startWorkout);
+        screens.finished.addEventListener('click', () => switchScreen('initial'));
+
+        document.getElementById('card-timer').addEventListener('click', () => {
+            appState.paused = !appState.paused;
+            appState.lastFrameTime = performance.now(); 
+
+            const card = document.getElementById('card-timer');
+            card.classList.remove('animate-subtle-bounce');
+            void card.offsetWidth; 
+            card.classList.add('animate-subtle-bounce');
+        });
+    </script>
+</body>
+</html>
